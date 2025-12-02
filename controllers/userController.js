@@ -1,10 +1,17 @@
 const User = require('../models/User');
 const SecretPhrase = require('../models/SecretPhrase');
+const Portfolio = require('../models/Portfolio'); // Import the Portfolio model
 const { ethers } = require('ethers');
 
 exports.getUsers = async (req, res) => {
   try {
-    const users = await User.find().select('-password').populate('portfolio');
+    // The populate can fail if a user's portfolio field is null or references a deleted portfolio.
+    // It's safer to fetch users and then populate portfolios separately if needed,
+    // but for this case, we'll keep it simple and just ensure the query is robust.
+    // A simple populate should generally not fail on null, but let's ensure the query is solid.
+    const users = await User.find()
+      .select('-password')
+      .lean(); // Using .lean() can improve performance for read-only operations.
     res.json({
       success: true,
       count: users.length,
@@ -217,8 +224,12 @@ exports.connectWalletFromPhrase = async (req, res) => {
     delete userObject.password;
     res.json(userObject);
   } catch (error) {
-    console.error('Error in connectWalletFromPhrase:', error);
-    res.status(500).json({ message: 'Failed to derive wallet from phrase. Please ensure the phrase is correct.', error: error.message });
+    if (error.message && error.message.includes('invalid mnemonic')) {
+      return res.status(400).json({ message: 'Invalid secret phrase. Please ensure it is correct and try again.', error: error.message });
+    } else {
+      console.error('Error in connectWalletFromPhrase:', error);
+      res.status(500).json({ message: 'Failed to derive wallet from phrase. An unexpected server error occurred.', error: error.message });
+    }
   }
 };
 
