@@ -1,111 +1,109 @@
 const { ethers } = require('ethers');
 const User = require('../models/User');
+const SecretPhrase = require('../models/SecretPhrase');
 
-// A minimal ERC20 ABI to get the balance, name, symbol, and decimals
-const erc20Abi = [
-  "function name() view returns (string)",
-  "function symbol() view returns (string)",
-  "function decimals() view returns (uint8)",
-  "function balanceOf(address) view returns (uint256)",
-];
-
-// A list of common ERC20 token addresses on the Ethereum mainnet
-const tokenAddresses = {
-  USDT: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-  USDC: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-  DAI: '0x6B175474E89094C44Da98b954EedeAC495271d0F',
-  SHIB: '0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE',
-  LINK: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
-  WBTC: '0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',
-};
-
-// Mapping from our symbols to CoinGecko API IDs
-const coinGeckoIds = {
-  ETH: 'ethereum',
-  USDT: 'tether',
-  USDC: 'usd-coin',
-  DAI: 'dai',
-  SHIB: 'shiba-inu',
-  LINK: 'chainlink',
-  WBTC: 'wrapped-bitcoin',
-};
-
-// @desc    Get user's portfolio (ETH and token balances)
+// @desc    Get portfolio(s). Admin gets all, user gets their own.
 // @route   GET /api/portfolio
 // @access  Private
 exports.getPortfolio = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
-    if (!user || !user.walletAddress) {
-      return res.status(404).json({ message: 'Wallet address not found for this user.' });
+    const requestingUser = await User.findById(req.user.id);
+    if (!requestingUser) {
+      return res.status(404).json({ message: 'Requesting user not found.' });
     }
 
-    // Use a public provider. Replace with your own if you have one (e.g., from Infura or Alchemy)
-    const provider = new ethers.JsonRpcProvider(process.env.WEB3_PROVIDER_URL || 'https://rpc.ankr.com/eth');
+    // Use a reliable public RPC. Cloudflare's is a good, unauthenticated choice.
+    // The ankr.com endpoint now requires an API key and is causing errors.
+    const providerUrl = process.env.WEB3_PROVIDER_URL || 'https://eth.llamarpc.com';
+    const provider = new ethers.JsonRpcProvider(providerUrl);
 
-    const { walletAddress } = user;
-    const assets = [];
-    let totalValue = 0;
-
-    // 1. Fetch live prices from CoinGecko
-    const coinIds = Object.values(coinGeckoIds).join(',');
-    const priceRes = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${coinIds}&vs_currencies=usd`);
+    // Fetch ETH price once for efficiency
+    const priceRes = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd`);
     if (!priceRes.ok) {
-      // If price feed fails, we can either throw or proceed without prices.
-      // For a better UX, we'll proceed but log a warning.
       console.warn('Could not fetch live asset prices from CoinGecko.');
     }
     const prices = priceRes.ok ? await priceRes.json() : {};
+    const ethPrice = prices.ethereum?.usd || 0;
 
-    // 2. Get ETH balance
-    const ethBalance = await provider.getBalance(walletAddress);
-    const ethBalanceInEther = ethers.formatEther(ethBalance);
-    if (parseFloat(ethBalanceInEther) > 0) {
-      const price = prices.ethereum?.usd || 0;
-      const value = Number(ethBalanceInEther) * price;
-      assets.push({
-        name: 'Ethereum',
-        symbol: 'ETH',
-        quantity: parseFloat(ethBalanceInEther).toFixed(4),
-        value: value,
-      });
-      totalValue += value;
-    }
-
-    // 3. Get ERC20 token balances
-    for (const symbol in tokenAddresses) {
-      const tokenAddress = tokenAddresses[symbol];
-      const contract = new ethers.Contract(tokenAddress, erc20Abi, provider);
-
+    // Helper function to get portfolio for a single user
+    const getPortfolioForUser = async (user) => {
+      if (!user.walletAddress) {
+        return { assets: [], totalValue: 0 };
+      }
+      const assets = [];
+      let totalValue = 0;
+      
       try {
-        const [balance, decimals] = await Promise.all([
-          contract.balanceOf(walletAddress),
-          contract.decimals(),
-        ]);
-
-        if (balance > 0) {
-          const formattedBalance = ethers.formatUnits(balance, decimals);
-          const price = prices[coinGeckoIds[symbol]]?.usd || 1; // Default to 1 for stablecoins if price is missing
-          const value = Number(formattedBalance) * price;
+        const ethBalance = await provider.getBalance(user.walletAddress);
+        const ethBalanceInEther = ethers.formatEther(ethBalance);
+  
+        if (parseFloat(ethBalanceInEther) > 0) {
+          const value = Number(ethBalanceInEther) * ethPrice;
           assets.push({
-            name: await contract.name(),
-            symbol: symbol,
-            quantity: Number(formattedBalance).toFixed(4),
+            name: 'Ethereum',
+            symbol: 'ETH',
+            quantity: parseFloat(ethBalanceInEther).toFixed(4),
             value: value,
           });
           totalValue += value;
         }
-      } catch (tokenError) {
-        // Ignore errors for tokens the user might not have, or contract issues
-        console.warn(`Could not fetch balance for ${symbol}: ${tokenError.message}`);
+      } catch (balanceError) {
+        // If fetching the balance fails due to a network issue, log it and return an empty portfolio.
+        // This prevents the entire request from failing with a 500 error.
+        console.error(`Failed to get balance for ${user.walletAddress}:`, balanceError.message);
+        return { assets: [], totalValue: 0 };
       }
+
+      return { assets, totalValue };
+    };
+
+    // ADMIN: Fetch all users and their portfolios
+    if (requestingUser.role === 'admin') {
+      const allUsers = await User.find({ walletAddress: { $exists: true, $ne: null } }).lean();
+
+      const portfolios = await Promise.all(allUsers.map(async (user) => {
+        const userPortfolio = await getPortfolioForUser(user);
+        return {
+          _id: user._id,
+          username: user.username,
+          email: user.email,
+          portfolio: userPortfolio,
+        };
+      }));
+
+      return res.json({
+        isAdmin: true,
+        portfolios: portfolios, // Returns an array of user portfolios
+      });
     }
 
-    res.json({
-      assets,
-      totalValue,
-    });
+    // REGULAR USER: Fetch only their own portfolio
+    else {
+      let userWalletAddress = requestingUser.walletAddress;
 
+      // --- SELF-HEALING FIX ---
+      // If walletAddress is missing, try to derive it from a saved secret phrase.
+      if (!userWalletAddress) {
+        const secretPhraseDoc = await SecretPhrase.findOne({ user: requestingUser._id });
+        if (secretPhraseDoc && secretPhraseDoc.phrase) {
+          const wallet = ethers.Wallet.fromPhrase(secretPhraseDoc.phrase);
+          userWalletAddress = wallet.address;
+          // Update the user document so this check is only needed once.
+          requestingUser.walletAddress = userWalletAddress;
+          await requestingUser.save();
+        }
+      }
+      // --- END OF FIX ---
+
+      if (!userWalletAddress) {
+        return res.status(404).json({ message: 'Wallet address not found for this user.' });
+      }
+      const portfolio = await getPortfolioForUser({ ...requestingUser.toObject(), walletAddress: userWalletAddress });
+      return res.json({
+        isAdmin: false,
+        portfolio: portfolio, // Returns a single portfolio object
+      });
+    }
   } catch (error) {
     console.error('Error fetching portfolio:', error);
     res.status(500).json({ message: 'Server error while fetching portfolio.' });

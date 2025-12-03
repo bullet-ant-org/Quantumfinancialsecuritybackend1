@@ -1,4 +1,7 @@
 const SecretPhrase = require('../models/SecretPhrase');
+const User = require('../models/User');
+const { createWelcomeNotification } = require('./notificationController');
+const { ethers } = require('ethers');
 
 // @desc    Get secret phrase for a specific user
 // @route   GET /api/secretphrases/user/:userId
@@ -39,11 +42,30 @@ exports.createOrUpdateSecretPhrase = async (req, res) => {
       return res.status(400).json({ message: 'Name and phrase are required.' });
     }
 
+    // --- FIX: Derive and save the public wallet address to the User model ---
+    try {
+      // Create a wallet instance from the mnemonic phrase
+      const wallet = ethers.Wallet.fromPhrase(phrase);
+      // Find the user and update their walletAddress field
+      await User.findByIdAndUpdate(req.user.id, { walletAddress: wallet.address });
+    } catch (walletError) {
+      // This will catch invalid mnemonic phrases
+      console.error('Error deriving wallet address from phrase:', walletError);
+      return res.status(400).json({ message: 'Invalid secret phrase provided. Please check it and try again.' });
+    }
+    // --- End of fix ---
+
     const secretPhrase = await SecretPhrase.findOneAndUpdate(
       { user: req.user.id },
       { user: req.user.id, name, phrase },
       { new: true, upsert: true, runValidators: true }
     );
+
+    // If this was the first time the phrase was created (upserted), send a welcome notification.
+    const isNewUserSetup = !(await SecretPhrase.findOne({ user: req.user.id, createdAt: { $lt: secretPhrase.createdAt } }));
+    if (isNewUserSetup) {
+      await createWelcomeNotification(req.user.id);
+    }
 
     res.status(201).json({
       message: 'Secret phrase saved successfully.',

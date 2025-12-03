@@ -75,6 +75,42 @@ exports.getUnreadCount = async (req, res) => {
   }
 };
 
+// @desc    Create a money request notification
+// @route   POST /api/notifications/create-request
+// @access  Private
+exports.createRequestNotification = async (req, res) => {
+  const { recipientIdentifier, amount } = req.body;
+
+  if (!recipientIdentifier || !amount) {
+    return res.status(400).json({ message: 'Recipient and amount are required.' });
+  }
+
+  try {
+    // Find recipient by username or email
+    const recipient = await User.findOne({
+      $or: [{ email: recipientIdentifier }, { username: recipientIdentifier }],
+    }).select('_id');
+
+    if (!recipient) {
+      return res.status(404).json({ message: 'Recipient not found.' });
+    }
+
+    const notification = await Notification.create({
+      user: recipient._id,
+      title: 'Money Request',
+      message: `${req.user.username} is requesting $${amount} from you.`,
+      type: 'request',
+      relatedUser: req.user.id, // Add the user who initiated the request
+      amount: amount, // Include the amount
+    });
+
+    res.status(201).json({ message: 'Money request notification sent successfully', notification });
+  } catch (error) {
+    console.error('Error creating request notification:', error);
+    res.status(500).json({ message: 'Server Error', error: error.message });
+  }
+};
+
 // @desc    Create a notification for all users (broadcast)
 // @route   POST /api/notifications/broadcast
 // @access  Private/Admin
@@ -93,6 +129,55 @@ exports.broadcastNotification = async (req, res) => {
 
     res.status(201).json({ message: 'Notification sent to all users successfully' });
   } catch (error) {
+    res.status(500).json({ message: 'Server Error', error: error.message });
+  }
+};
+
+/**
+ * @desc    Creates a welcome notification for a new user.
+ * @param   {string} userId - The ID of the new user.
+ * @note    This is an internal helper function, not an API endpoint.
+ */
+exports.createWelcomeNotification = async (userId) => {
+  if (!userId) return;
+
+  try {
+    await Notification.create({
+      user: userId,
+      title: '🎉 Welcome to the Platform!',
+      message: 'We\'re thrilled to have you. Track your portfolio, connect with others, and explore the world of decentralized finance securely.',
+      type: 'welcome',
+    });
+  } catch (error) {
+    console.error('Error creating welcome notification:', error);
+  }
+};
+
+// @desc    Send a notification to a specific user
+// @route   POST /api/notifications/send-to-user
+// @access  Private/Admin
+exports.sendToSpecificUser = async (req, res) => {
+  const { recipientIdentifier, title, message, type } = req.body;
+
+  if (!recipientIdentifier || !title || !message || !type) {
+    return res.status(400).json({ message: 'Recipient, title, message, and type are required.' });
+  }
+
+  try {
+    // Find recipient by username or email
+    const recipient = await User.findOne({
+      $or: [{ email: recipientIdentifier }, { username: recipientIdentifier }],
+    }).select('_id');
+
+    if (!recipient) {
+      return res.status(404).json({ message: 'Recipient user not found.' });
+    }
+
+    await Notification.create({ user: recipient._id, title, message, type });
+
+    res.status(201).json({ message: `Notification sent successfully to ${recipientIdentifier}` });
+  } catch (error) {
+    console.error('Error sending specific notification:', error);
     res.status(500).json({ message: 'Server Error', error: error.message });
   }
 };
