@@ -1,5 +1,6 @@
 const Transaction = require('../models/Transaction');
 const User = require('../models/User');
+const { default: mongoose } = require('mongoose');
 
 exports.getTransactions = async (req, res) => {
   try {

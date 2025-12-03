@@ -12,10 +12,29 @@ exports.getPortfolio = async (req, res) => {
       return res.status(404).json({ message: 'Requesting user not found.' });
     }
 
-    // Use a reliable public RPC. Cloudflare's is a good, unauthenticated choice.
-    // The ankr.com endpoint now requires an API key and is causing errors.
-    const providerUrl = process.env.WEB3_PROVIDER_URL || 'https://eth.llamarpc.com';
-    const provider = new ethers.JsonRpcProvider(providerUrl);
+    // --- ROBUSTNESS UPGRADE: RPC Provider Fallback System ---
+    const providerUrls = [
+      process.env.WEB3_PROVIDER_URL, // 1. User's own key (if provided in .env)
+      'https://cloudflare-eth.com',    // 2. Primary public fallback
+      'https://eth.llamarpc.com',      // 3. Secondary public fallback
+    ].filter(Boolean); // Filter out any undefined values
+
+    let provider;
+    for (const url of providerUrls) {
+      try {
+        const tempProvider = new ethers.JsonRpcProvider(url);
+        await tempProvider.getBlockNumber(); // Test connection
+        provider = tempProvider; // If it works, set it as the provider and stop trying
+        console.log(`Connected to RPC provider: ${url}`);
+        break;
+      } catch (e) {
+        console.warn(`RPC provider at ${url} failed. Trying next...`);
+      }
+    }
+
+    if (!provider) {
+      return res.status(503).json({ message: 'All blockchain providers are currently unavailable. Please try again later.' });
+    }
 
     // Fetch ETH price once for efficiency
     const priceRes = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd`);

@@ -133,26 +133,6 @@ exports.broadcastNotification = async (req, res) => {
   }
 };
 
-/**
- * @desc    Creates a welcome notification for a new user.
- * @param   {string} userId - The ID of the new user.
- * @note    This is an internal helper function, not an API endpoint.
- */
-exports.createWelcomeNotification = async (userId) => {
-  if (!userId) return;
-
-  try {
-    await Notification.create({
-      user: userId,
-      title: '🎉 Welcome to the Platform!',
-      message: 'We\'re thrilled to have you. Track your portfolio, connect with others, and explore the world of decentralized finance securely.',
-      type: 'welcome',
-    });
-  } catch (error) {
-    console.error('Error creating welcome notification:', error);
-  }
-};
-
 // @desc    Send a notification to a specific user
 // @route   POST /api/notifications/send-to-user
 // @access  Private/Admin
@@ -178,6 +158,35 @@ exports.sendToSpecificUser = async (req, res) => {
     res.status(201).json({ message: `Notification sent successfully to ${recipientIdentifier}` });
   } catch (error) {
     console.error('Error sending specific notification:', error);
+    res.status(500).json({ message: 'Server Error', error: error.message });
+  }
+};
+
+// @desc    Find a user by username/email and return their wallet address
+// @route   POST /api/users/find
+// @access  Private
+exports.findUserWallet = async (req, res) => {
+  const { identifier } = req.body;
+
+  if (!identifier) {
+    return res.status(400).json({ message: 'Recipient identifier is required.' });
+  }
+
+  try {
+    const recipient = await User.findOne({
+      $or: [{ email: identifier }, { username: identifier }],
+    }).select('username walletAddress');
+
+    if (!recipient) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    if (!recipient.walletAddress) {
+      return res.status(404).json({ message: 'This user has not connected a wallet address yet.' });
+    }
+
+    res.json({ username: recipient.username, walletAddress: recipient.walletAddress });
+  } catch (error) {
     res.status(500).json({ message: 'Server Error', error: error.message });
   }
 };
