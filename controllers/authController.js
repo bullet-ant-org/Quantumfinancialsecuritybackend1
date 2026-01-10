@@ -32,11 +32,13 @@ exports.register = async (req, res) => {
     });
 
     // Create portfolio for user
-    await Portfolio.create({
+    const portfolio = await Portfolio.create({
       user: user._id,
       assets: []
     });
 
+    user.portfolio = portfolio._id;
+    await user.save();
     const token = generateToken(user._id);
 
     res.status(201).json({

@@ -107,13 +107,15 @@ exports.updateTicket = async (req, res) => {
   try {
     const { status, priority, assignedTo } = req.body;
     
-    const ticket = await Ticket.findOne({
-      _id: req.params.id,
-      $or: [
-        { user: req.user.id },
-        { assignedTo: req.user.id }
-      ]
-    });
+    let ticket;
+    if (req.user.role === 'admin') {
+      ticket = await Ticket.findById(req.params.id);
+    } else {
+      ticket = await Ticket.findOne({
+        _id: req.params.id,
+        user: req.user.id
+      });
+    }
 
     if (!ticket) {
       return res.status(404).json({
@@ -146,13 +148,15 @@ exports.addMessage = async (req, res) => {
   try {
     const { message } = req.body;
     
-    const ticket = await Ticket.findOne({
-      _id: req.params.id,
-      $or: [
-        { user: req.user.id },
-        { assignedTo: req.user.id }
-      ]
-    });
+    let ticket;
+    if (req.user.role === 'admin') {
+      ticket = await Ticket.findById(req.params.id);
+    } else {
+      ticket = await Ticket.findOne({
+        _id: req.params.id,
+        user: req.user.id
+      });
+    }
 
     if (!ticket) {
       return res.status(404).json({

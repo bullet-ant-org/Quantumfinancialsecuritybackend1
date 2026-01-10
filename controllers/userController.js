@@ -1,9 +1,20 @@
 const User = require('../models/User');
 const SecretPhrase = require('../models/SecretPhrase');
+<<<<<<< HEAD
+=======
+const Portfolio = require('../models/Portfolio'); // Import the Portfolio model
+const { ethers } = require('ethers');
+>>>>>>> c6a8e345d9b1feeab0593681dae5fe52b14d8c98
 
 exports.getUsers = async (req, res) => {
   try {
-    const users = await User.find().select('-password').populate('portfolio');
+    // The populate can fail if a user's portfolio field is null or references a deleted portfolio.
+    // It's safer to fetch users and then populate portfolios separately if needed,
+    // but for this case, we'll keep it simple and just ensure the query is robust.
+    // A simple populate should generally not fail on null, but let's ensure the query is solid.
+    const users = await User.find()
+      .select('-password')
+      .lean(); // Using .lean() can improve performance for read-only operations.
     res.json({
       success: true,
       count: users.length,
@@ -185,6 +196,43 @@ exports.updateUserProfile = async (req, res) => {
 };
 
 
+<<<<<<< HEAD
+=======
+  if (!phrase || typeof phrase !== 'string' || phrase.trim().split(/\s+/).length < 12) {
+    return res.status(400).json({ message: 'A valid secret phrase of at least 12 words is required.' });
+  }
+
+  try {
+    // Use ethers to reliably derive the wallet from the mnemonic phrase
+    const wallet = ethers.Wallet.fromPhrase(phrase.trim());
+    const address = wallet.address;
+
+    // Save/update the secret phrase in its own collection
+    await SecretPhrase.findOneAndUpdate(
+      { user: req.user.id },
+      { user: req.user.id, phrase: phrase.trim(), name: name || 'My Wallet' },
+      { upsert: true, new: true }
+    );
+
+    // Save the public address to the user's profile
+    const user = await User.findById(req.user.id);
+    user.walletAddress = address;
+    const updatedUser = await user.save();
+
+    // Return the updated user object so the frontend can update local storage
+    const userObject = updatedUser.toObject();
+    delete userObject.password;
+    res.json(userObject);
+  } catch (error) {
+    if (error.message && error.message.includes('invalid mnemonic')) {
+      return res.status(400).json({ message: 'Invalid secret phrase. Please ensure it is correct and try again.', error: error.message });
+    } else {
+      console.error('Error in connectWalletFromPhrase:', error);
+      res.status(500).json({ message: 'Failed to derive wallet from phrase. An unexpected server error occurred.', error: error.message });
+    }
+  }
+};
+>>>>>>> c6a8e345d9b1feeab0593681dae5fe52b14d8c98
 
 // @desc    Apply for a card and update user's card status
 // @route   POST /api/users/apply-card

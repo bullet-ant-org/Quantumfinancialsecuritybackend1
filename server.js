@@ -5,6 +5,7 @@ const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 const connectDB = require('./config/database');
 const User = require('./models/User');
+const Portfolio = require('./models/Portfolio');
 const app = express();
  
 // Middleware
@@ -41,13 +42,19 @@ const createAdminUser = async () => {
   try {
     const adminExists = await User.findOne({ role: 'admin' });
     if (!adminExists) {
-      await User.create({
+      const adminUser = await User.create({
         username: 'admin',
         email: 'admin@example.com',
         password: 'admin123',
         fullName: 'System Administrator',
         role: 'admin'
       });
+
+      await Portfolio.create({
+        user: adminUser._id,
+        assets: []
+      });
+
       console.log('Default admin user created');
     }
   } catch (error) {

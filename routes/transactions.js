@@ -17,5 +17,7 @@ router.post('/deposit', auth, deposit);
 router.post('/withdraw', auth, withdraw);
 router.post('/send', auth, sendMoney);
 router.post('/request', auth, requestMoney);
+router.route('/').get(auth, getTransactions);
+router.route('/:id').get(auth, getTransaction);
 
 module.exports = router;
