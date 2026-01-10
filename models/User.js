@@ -40,7 +40,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['user', 'admin'],
     default: 'user'
-  }
+  },
+  // Wallet addresses for different chains
+  stellarAddress: { type: String, default: '' },
+  rippleAddress: { type: String, default: '' },
 }, {
   timestamps: true
 });

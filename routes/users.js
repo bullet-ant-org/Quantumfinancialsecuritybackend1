@@ -9,7 +9,6 @@ const {
   getUserProfile,
   updateUserProfile,
   connectWallet,
-  connectWalletFromPhrase,
   applyForCard
 } = require('../controllers/userController');
 const auth = require('../middleware/auth'); // Corrected from protect
@@ -20,7 +19,6 @@ const router = express.Router();
 router.get('/', [auth, admin], getUsers);
 router.route('/profile').get(auth, getUserProfile).put(auth, updateUserProfile);
 router.put('/change-password', auth, changePassword);
-router.post('/connect-wallet-phrase', auth, connectWalletFromPhrase);
 router.put('/connect-wallet', auth, connectWallet);
 router.post('/apply-card', auth, applyForCard);
 

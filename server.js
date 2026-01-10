@@ -23,6 +23,7 @@ app.use(limiter);
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/portfolio', require('./routes/portfolio'));
+app.use('/api/wallet', require('./routes/walletRoutes'));
 app.use('/api/secretphrases', require('./routes/secretPhraseRoutes'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/disputes', require('./routes/disputes'));

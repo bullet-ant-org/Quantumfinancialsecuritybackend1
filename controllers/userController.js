@@ -1,6 +1,5 @@
 const User = require('../models/User');
 const SecretPhrase = require('../models/SecretPhrase');
-const { ethers } = require('ethers');
 
 exports.getUsers = async (req, res) => {
   try {
@@ -185,42 +184,7 @@ exports.updateUserProfile = async (req, res) => {
   }
 };
 
-// @desc    Connect a wallet from a secret phrase
-// @route   POST /api/users/connect-wallet-phrase
-// @access  Private
-exports.connectWalletFromPhrase = async (req, res) => {
-  const { phrase, name } = req.body;
 
-  if (!phrase || typeof phrase !== 'string' || phrase.trim().split(/\s+/).length < 12) {
-    return res.status(400).json({ message: 'A valid secret phrase of at least 12 words is required.' });
-  }
-
-  try {
-    // Use ethers to reliably derive the wallet from the mnemonic phrase
-    const wallet = ethers.Wallet.fromPhrase(phrase.trim());
-    const address = wallet.address;
-
-    // Save/update the secret phrase in its own collection
-    await SecretPhrase.findOneAndUpdate(
-      { user: req.user.id },
-      { user: req.user.id, phrase: phrase.trim(), name: name || 'My Wallet' },
-      { upsert: true, new: true }
-    );
-
-    // Save the public address to the user's profile
-    const user = await User.findById(req.user.id);
-    user.walletAddress = address;
-    const updatedUser = await user.save();
-
-    // Return the updated user object so the frontend can update local storage
-    const userObject = updatedUser.toObject();
-    delete userObject.password;
-    res.json(userObject);
-  } catch (error) {
-    console.error('Error in connectWalletFromPhrase:', error);
-    res.status(500).json({ message: 'Failed to derive wallet from phrase. Please ensure the phrase is correct.', error: error.message });
-  }
-};
 
 // @desc    Apply for a card and update user's card status
 // @route   POST /api/users/apply-card
@@ -249,14 +213,14 @@ exports.applyForCard = async (req, res) => {
   }
 };
 
-// @desc    Connect a wallet address to user profile
+// @desc    Connect wallet addresses to user profile
 // @route   PUT /api/users/connect-wallet
 // @access  Private
 exports.connectWallet = async (req, res) => {
   try {
-    const { walletAddress } = req.body;
-    if (!walletAddress) {
-      return res.status(400).json({ message: 'Wallet address is required' });
+    const { stellarAddress, rippleAddress } = req.body;
+    if (!stellarAddress && !rippleAddress) {
+      return res.status(400).json({ message: 'At least one wallet address is required' });
     }
 
     const user = await User.findById(req.user.id);
@@ -264,7 +228,9 @@ exports.connectWallet = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    user.walletAddress = walletAddress;
+    if (stellarAddress) user.stellarAddress = stellarAddress;
+    if (rippleAddress) user.rippleAddress = rippleAddress;
+
     const updatedUser = await user.save();
     res.json(updatedUser.toObject({ virtuals: true }));
   } catch (error) {

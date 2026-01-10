@@ -49,7 +49,9 @@ exports.register = async (req, res) => {
         fullName: user.fullName,
         balance: user.balance,
         cardStatus: user.cardStatus,
-        role: user.role
+        role: user.role,
+        stellarAddress: user.stellarAddress,
+        rippleAddress: user.rippleAddress
       }
     });
   } catch (error) {
@@ -92,7 +94,9 @@ exports.login = async (req, res) => {
         fullName: user.fullName,
         balance: user.balance,
         cardStatus: user.cardStatus,
-        role: user.role
+        role: user.role,
+        stellarAddress: user.stellarAddress,
+        rippleAddress: user.rippleAddress
       }
     });
   } catch (error) {
@@ -115,7 +119,9 @@ exports.getMe = async (req, res) => {
         fullName: user.fullName,
         balance: user.balance,
         cardStatus: user.cardStatus,
-        role: user.role
+        role: user.role,
+        stellarAddress: user.stellarAddress,
+        rippleAddress: user.rippleAddress
       }
     });
   } catch (error) {

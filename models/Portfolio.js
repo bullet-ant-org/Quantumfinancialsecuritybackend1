@@ -5,9 +5,7 @@ const assetSchema = new mongoose.Schema({
     type: String,
     required: true,
     enum: [
-      'Bitcoin', 'Ethereum', 'Usdt(Trc20)', 'Usdt(Erc20)', 
-      'Dogecoin', 'Litecoin', 'Solana', 'Stellar', 
-      'Ripple', 'Shiba', 'Cardano', 'Polkadot'
+      'Stellar', 'Ripple'
     ]
   },
   symbol: {
