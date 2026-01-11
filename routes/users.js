@@ -9,7 +9,8 @@ const {
   getUserProfile,
   updateUserProfile,
   connectWallet,
-  applyForCard
+  applyForCard,
+  findUser
 } = require('../controllers/userController');
 const auth = require('../middleware/auth'); // Corrected from protect
 const admin = require('../middleware/admin'); // Corrected from protect
@@ -21,6 +22,7 @@ router.route('/profile').get(auth, getUserProfile).put(auth, updateUserProfile);
 router.put('/change-password', auth, changePassword);
 router.put('/connect-wallet', auth, connectWallet);
 router.post('/apply-card', auth, applyForCard);
+router.post('/find', auth, findUser);
 
 router.get('/:id', auth, getUser);
 router.put('/:id', auth, updateUser);

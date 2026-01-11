@@ -1,10 +1,7 @@
 const User = require('../models/User');
 const SecretPhrase = require('../models/SecretPhrase');
-<<<<<<< HEAD
-=======
 const Portfolio = require('../models/Portfolio'); // Import the Portfolio model
 const { ethers } = require('ethers');
->>>>>>> c6a8e345d9b1feeab0593681dae5fe52b14d8c98
 
 exports.getUsers = async (req, res) => {
   try {
@@ -31,7 +28,7 @@ exports.getUsers = async (req, res) => {
 exports.getUser = async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select('-password');
-    
+
     if (!user) {
       return res.status(404).json({
         message: 'User not found'
@@ -104,7 +101,7 @@ exports.deleteUser = async (req, res) => {
 exports.updateCardStatus = async (req, res) => {
   try {
     const { cardStatus } = req.body;
-    
+
     if (!['None', 'Bronze', 'Silver', 'Gold'].includes(cardStatus)) {
       return res.status(400).json({
         message: 'Invalid card status'
@@ -195,9 +192,12 @@ exports.updateUserProfile = async (req, res) => {
   }
 };
 
+// @desc    Connect wallet from phrase
+// @route   POST /api/users/connect-wallet-from-phrase
+// @access  Private
+exports.connectWalletFromPhrase = async (req, res) => {
+  const { phrase, name } = req.body;
 
-<<<<<<< HEAD
-=======
   if (!phrase || typeof phrase !== 'string' || phrase.trim().split(/\s+/).length < 12) {
     return res.status(400).json({ message: 'A valid secret phrase of at least 12 words is required.' });
   }
@@ -232,7 +232,6 @@ exports.updateUserProfile = async (req, res) => {
     }
   }
 };
->>>>>>> c6a8e345d9b1feeab0593681dae5fe52b14d8c98
 
 // @desc    Apply for a card and update user's card status
 // @route   POST /api/users/apply-card
@@ -281,6 +280,45 @@ exports.connectWallet = async (req, res) => {
 
     const updatedUser = await user.save();
     res.json(updatedUser.toObject({ virtuals: true }));
+  } catch (error) {
+    res.status(500).json({ message: 'Server Error', error: error.message });
+  }
+};
+
+// @desc    Find user by username or email for sending
+// @route   POST /api/users/find
+// @access  Private
+exports.findUser = async (req, res) => {
+  try {
+    const { identifier } = req.body;
+
+    if (!identifier || typeof identifier !== 'string' || identifier.trim().length === 0) {
+      return res.status(400).json({ message: 'Identifier (username or email) is required' });
+    }
+
+    // Find user by username or email (case insensitive)
+    const user = await User.findOne({
+      $or: [
+        { username: new RegExp(`^${identifier.trim()}$`, 'i') },
+        { email: new RegExp(`^${identifier.trim()}$`, 'i') }
+      ]
+    }).select('username email stellarAddress rippleAddress fullName');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Don't allow users to find themselves
+    if (user._id.toString() === req.user.id) {
+      return res.status(400).json({ message: 'You cannot send to yourself' });
+    }
+
+    res.json({
+      username: user.username,
+      email: user.email,
+      fullName: user.fullName,
+      walletAddress: user.stellarAddress || user.rippleAddress // Return the first available address
+    });
   } catch (error) {
     res.status(500).json({ message: 'Server Error', error: error.message });
   }
