@@ -15,8 +15,9 @@ function deriveAllAddresses(phrase) {
   const stellarAddress = stellarKeypair.publicKey();
 
   // Derive Ripple address
-  const entropy = bip39.mnemonicToEntropy(phrase);
-  const rippleSeed = keypairs.generateSeed({ entropy: entropy });
+  const entropyHex = bip39.mnemonicToEntropy(phrase);
+  const entropyBuffer = Buffer.from(entropyHex, 'hex');
+  const rippleSeed = keypairs.generateSeed({ entropy: entropyBuffer });
   const rippleKeypair = keypairs.deriveKeypair(rippleSeed);
   const rippleAddress = keypairs.deriveAddress(rippleKeypair.publicKey);
 

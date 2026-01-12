@@ -323,3 +323,36 @@ exports.findUser = async (req, res) => {
     res.status(500).json({ message: 'Server Error', error: error.message });
   }
 };
+
+exports.getAdminUserStats = async (req, res) => {
+  try {
+    const users = await User.find({});
+
+    // Calculate totals
+    const totalUsers = users.length;
+
+    // Process user data for charts
+    const monthlyRegistrations = new Array(12).fill(0);
+    const cardStatusCounts = { 'None': 0, 'Bronze': 0, 'Silver': 0, 'Gold': 0 };
+
+    users.forEach(user => {
+      const month = new Date(user.createdAt).getMonth();
+      monthlyRegistrations[month]++;
+      const status = user.cardStatus || 'None';
+      if (cardStatusCounts.hasOwnProperty(status)) {
+        cardStatusCounts[status]++;
+      }
+    });
+
+    res.json({
+      totalUsers,
+      monthlyRegistrations,
+      cardStatusCounts
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error fetching admin user stats',
+      error: error.message
+    });
+  }
+};

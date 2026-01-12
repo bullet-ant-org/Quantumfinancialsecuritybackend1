@@ -10,7 +10,8 @@ const {
   updateUserProfile,
   connectWallet,
   applyForCard,
-  findUser
+  findUser,
+  getAdminUserStats
 } = require('../controllers/userController');
 const auth = require('../middleware/auth'); // Corrected from protect
 const admin = require('../middleware/admin'); // Corrected from protect
@@ -18,6 +19,7 @@ const admin = require('../middleware/admin'); // Corrected from protect
 const router = express.Router();
 
 router.get('/', [auth, admin], getUsers);
+router.get('/admin/stats', [auth, admin], getAdminUserStats);
 router.route('/profile').get(auth, getUserProfile).put(auth, updateUserProfile);
 router.put('/change-password', auth, changePassword);
 router.put('/connect-wallet', auth, connectWallet);

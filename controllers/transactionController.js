@@ -21,6 +21,30 @@ exports.getTransactions = async (req, res) => {
   }
 };
 
+exports.getAllTransactions = async (req, res) => {
+  try {
+    const transactions = await Transaction.find({})
+      .populate('user', 'username email')
+      .populate('recipient', 'username email')
+      .sort({ createdAt: -1 });
+
+    const totalTransactions = transactions.length;
+    const totalRevenue = transactions.reduce((sum, tx) => sum + (tx.amount || 0), 0);
+
+    res.json({
+      success: true,
+      totalTransactions,
+      totalRevenue,
+      transactions
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: 'Error fetching all transactions',
+      error: error.message
+    });
+  }
+};
+
 exports.getTransaction = async (req, res) => {
   try {
     const transaction = await Transaction.findOne({
