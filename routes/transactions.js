@@ -4,6 +4,7 @@ const {
   withdraw,
   sendMoney,
   requestMoney,
+  sendCrypto,
   getTransactions,
   getAllTransactions,
   getTransaction
@@ -19,7 +20,8 @@ router.get('/:id', auth, getTransaction);
 router.post('/deposit', auth, deposit);
 router.post('/withdraw', auth, withdraw);
 router.post('/send', auth, sendMoney);
-router.post('/request', auth, requestMoney);
+router.post('/send-crypto', auth, sendCrypto);
+router.post('/request-crypto', auth, requestMoney); // New route for crypto requests
 router.route('/').get(auth, getTransactions);
 router.route('/:id').get(auth, getTransaction);
 

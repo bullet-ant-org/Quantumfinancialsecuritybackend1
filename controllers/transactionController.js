@@ -4,16 +4,21 @@ const { default: mongoose } = require('mongoose');
 
 exports.getTransactions = async (req, res) => {
   try {
+    console.log('Fetching transactions for user:', req.user.id);
+    
     const transactions = await Transaction.find({ user: req.user.id })
       .populate('recipient', 'username email')
       .sort({ createdAt: -1 });
 
+    console.log('Found transactions:', transactions);
+    
     res.json({
       success: true,
       count: transactions.length,
       transactions
     });
   } catch (error) {
+    console.error('Error fetching transactions:', error);
     res.status(500).json({
       message: 'Error fetching transactions',
       error: error.message
@@ -202,13 +207,60 @@ exports.sendMoney = async (req, res) => {
 
 exports.requestMoney = async (req, res) => {
   try {
-    const { amount, recipientEmail, recipientUsername, remarks } = req.body;
+    const { amount, senderIdentifier, currency, remarks } = req.body; // Changed recipientEmail/Username to senderIdentifier, added currency
+
+    // Find the sender (the one being requested from)
+    const sender = await User.findOne({
+      $or: [
+        { email: senderIdentifier },
+        { username: senderIdentifier }
+      ]
+    });
+
+    if (!sender) {
+      return res.status(404).json({
+        message: 'Sender not found'
+      });
+    }
+
+    // The requester is the current authenticated user (req.user.id)
+    const transaction = await Transaction.create({
+      user: req.user.id, // Transaction belongs to the requester
+      type: 'request',
+      amount,
+      currency, // Store the currency for the request
+      recipient: sender._id, // The recipient of the request (who will send the funds)
+      recipientUsername: sender.username, // Store recipient's username for display
+      recipientEmail: sender.email, // Store recipient's email for display
+      senderIdentifier: senderIdentifier, // Store the identifier of the person being requested from
+      status: 'pending' // Requests are pending until fulfilled
+    });
+
+    console.log('Created request transaction:', transaction);
+    
+    res.status(201).json({
+      success: true,
+      message: `Request for ${amount} ${currency} sent successfully to ${senderIdentifier}`,
+      transaction
+    });
+  } catch (error) {
+    console.error('Error requesting money:', error);
+    res.status(500).json({
+      message: 'Error requesting money',
+      error: error.message
+    });
+  }
+};
+
+exports.sendCrypto = async (req, res) => {
+  try {
+    const { amount, recipientIdentifier, currency, remarks } = req.body;
 
     // Find recipient
     const recipient = await User.findOne({
       $or: [
-        { email: recipientEmail },
-        { username: recipientUsername }
+        { email: recipientIdentifier },
+        { username: recipientIdentifier }
       ]
     });
 
@@ -218,25 +270,109 @@ exports.requestMoney = async (req, res) => {
       });
     }
 
+    // Check if recipient has the appropriate wallet address
+    let recipientAddress;
+    if (currency === 'XLM' || currency === 'USDT') {
+      if (!recipient.stellarAddress) {
+        return res.status(400).json({
+          message: 'Recipient has not connected a Stellar wallet'
+        });
+      }
+      recipientAddress = recipient.stellarAddress;
+    } else if (currency === 'XRP') {
+      if (!recipient.rippleAddress) {
+        return res.status(400).json({
+          message: 'Recipient has not connected a Ripple wallet'
+        });
+      }
+      recipientAddress = recipient.rippleAddress;
+    } else {
+      return res.status(400).json({
+        message: 'Unsupported currency'
+      });
+    }
+
+    // Get sender's secret phrase
+    const SecretPhrase = require('../models/SecretPhrase');
+    const secretPhrase = await SecretPhrase.findOne({ user: req.user.id });
+    if (!secretPhrase) {
+      return res.status(400).json({
+        message: 'Sender has not set up a secret phrase'
+      });
+    }
+
+    // Check balance
+    const cryptoService = require('../config/cryptoService');
+    let balance;
+    if (currency === 'XLM') {
+      const user = await User.findById(req.user.id);
+      if (!user.stellarAddress) {
+        return res.status(400).json({
+          message: 'Sender has not connected a Stellar wallet'
+        });
+      }
+      balance = await cryptoService.getStellarBalance(user.stellarAddress);
+    } else if (currency === 'XRP') {
+      const user = await User.findById(req.user.id);
+      if (!user.rippleAddress) {
+        return res.status(400).json({
+          message: 'Sender has not connected a Ripple wallet'
+        });
+      }
+      balance = await cryptoService.getRippleBalance(user.rippleAddress);
+    } else if (currency === 'USDT') {
+      // Assume USDT on Stellar for now
+      const user = await User.findById(req.user.id);
+      if (!user.stellarAddress) {
+        return res.status(400).json({
+          message: 'Sender has not connected a Stellar wallet'
+        });
+      }
+      balance = await cryptoService.getStellarBalance(user.stellarAddress);
+      // Note: This is simplified; USDT balance check would need asset balance
+    } else {
+      return res.status(400).json({
+        message: 'Unsupported currency'
+      });
+    }
+
+    if (!balance || balance.quantity < amount) {
+      return res.status(400).json({
+        message: 'Insufficient balance'
+      });
+    }
+
+    // Send crypto
+    let sendResult;
+    if (currency === 'XLM' || currency === 'USDT') {
+      sendResult = await cryptoService.sendStellar(secretPhrase.phrase, recipientAddress, amount);
+    } else if (currency === 'XRP') {
+      sendResult = await cryptoService.sendRipple(secretPhrase.phrase, recipientAddress, amount);
+    }
+
+    // Log transaction
     const transaction = await Transaction.create({
       user: req.user.id,
-      type: 'request',
+      type: 'send',
       amount,
+      currency,
       recipient: recipient._id,
       recipientEmail: recipient.email,
       recipientUsername: recipient.username,
       remarks,
-      status: 'pending'
+      status: 'completed'
     });
 
     res.status(201).json({
       success: true,
-      message: 'Money request sent successfully',
-      transaction
+      message: `${currency} sent successfully`,
+      transaction,
+      transactionHash: sendResult.transactionHash
     });
   } catch (error) {
+    console.error('Error sending crypto:', error);
     res.status(500).json({
-      message: 'Error requesting money',
+      message: 'Error sending crypto',
       error: error.message
     });
   }
